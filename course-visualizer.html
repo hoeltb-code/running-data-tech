@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prototype animation coureurs 4:5</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #0f172a 0%, #020617 45%, #000000 100%);
+      color: #f9fafb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px 0 32px;
+    }
+
+    .app-shell {
+      position: relative;
+      padding: 16px;
+      border-radius: 0;
+      background: radial-gradient(circle at top, rgba(148, 163, 184, 0.16), transparent 60%);
+      box-shadow:
+        0 30px 80px rgba(15, 23, 42, 0.8),
+        0 0 0 1px rgba(148, 163, 184, 0.25);
+    }
+
+    #track {
+      position: relative;
+      width: 700px;
+      aspect-ratio: 9 / 16;
+      border-radius: 0;
+      background: #020617;
+      padding: 12px 10px 16px 10px;
+      box-sizing: border-box;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      box-shadow:
+        0 20px 60px rgba(15, 23, 42, 0.9),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+    }
+
+    /* HUD HAUT */
+
+    .hud-top {
+      position: absolute;
+      top: 16px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      font-size: 0.9rem;
+      opacity: 0.95;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      z-index: 50;
+    }
+
+    .hud-top-left {
+      display: none; /* on la montre seulement en cas d’info/erreur CSV */
+    }
+
+    .hud-top-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .hud-top-center .pill {
+      font-size: 1.2rem;        /* taille KM + chrono */
+      padding: 6px 18px;
+      letter-spacing: 0.15em;
+    }
+
+    .hud-top-right {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .hud-bottom {
+      position: absolute;
+      bottom: 10px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      font-size: 0.7rem;
+      opacity: 0.75;
+      gap: 8px;
+      z-index: 50;
+    }
+
+    .pill {
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      color: #e5e7eb;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.85);
+      white-space: nowrap;
+    }
+
+    .pill--live {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem; /* taille texte LIVE */
+    }
+
+    .pill--live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #ef4444;
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+    }
+
+    .pill--live-text {
+      letter-spacing: 0.18em;
+    }
+
+    .grid-line {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      height: 1px;
+      background: rgba(148, 163, 184, 0.18);
+      z-index: 5;
+    }
+
+    .runner-row {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: top 0.35s ease-out;
+      z-index: 30;
+    }
+
+    .runner-row::before {
+      content: "";
+      position: absolute;
+      inset: -2px 0;
+      background: linear-gradient(to right,
+        rgba(15, 23, 42, 0.9),
+        rgba(15, 23, 42, 0.7),
+        transparent 80%);
+      opacity: 0;
+      transition: opacity 0.2s ease-out;
+      z-index: 0;
+    }
+
+    .runner-row.row-even::before {
+      opacity: 0.35;
+    }
+
+    .runner-row.leader::before {
+      opacity: 0.75;
+    }
+
+    .runner-rank {
+      font-size: 0.7rem;
+      width: 20px;
+      text-align: right;
+      opacity: 0.65;
+      position: relative;
+      z-index: 3;
+    }
+
+    @keyframes bobbing {
+      0%   { transform: translateY(0); }
+      50%  { transform: translateY(-1px); }
+      100% { transform: translateY(0); }
+    }
+
+    .runner-sprite {
+      position: absolute;
+      width: 12px;
+      height: 18px;
+      box-sizing: border-box;
+      image-rendering: pixelated;
+      top: -4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      animation: bobbing 0.5s ease-in-out infinite;
+      z-index: 3;
+    }
+
+    .runner-row.leader .runner-sprite {
+      filter: drop-shadow(0 0 6px rgba(250, 250, 210, 0.9));
+    }
+
+    .sprite-head {
+      width: 5px;
+      height: 5px;
+      background: #f5e0c8;
+      border-radius: 1px;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+    }
+
+    .sprite-body {
+      width: 8px;
+      height: 7px;
+      margin-top: 1px;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+    }
+
+    .sprite-legs {
+      display: flex;
+      gap: 1px;
+      margin-top: 1px;
+    }
+
+    @keyframes leg-left {
+      0%   { transform: rotate(12deg); }
+      50%  { transform: rotate(-18deg); }
+      100% { transform: rotate(12deg); }
+    }
+
+    @keyframes leg-right {
+      0%   { transform: rotate(-8deg); }
+      50%  { transform: rotate(12deg); }
+      100% { transform: rotate(-8deg); }
+    }
+
+    .sprite-leg {
+      width: 3px;
+      height: 6px;
+      background: #d0d0d0;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+      transform-origin: top center;
+    }
+
+    .sprite-leg.left {
+      animation: leg-left 0.35s infinite ease-in-out;
+    }
+
+    .sprite-leg.right {
+      animation: leg-right 0.35s infinite ease-in-out;
+    }
+
+    /*taille police prénom */
+    .runner-name {
+      position: absolute;
+      font-size: 1.3rem; /* taille de la police des noms des coureurs */
+      white-space: nowrap;
+      opacity: 0.88;
+      pointer-events: none;
+      left: 0;
+      top: 0;
+      color: #f9fafb;
+      text-shadow: 0 1px 3px rgba(15,23,42,0.9);
+      z-index: 3;
+    }
+
+    .runner-bar-wrapper {
+      position: absolute;
+      left: 40px;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      overflow: hidden;
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.7);
+      z-index: 1;
+    }
+
+    .runner-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transform-origin: left center;
+      transition: width 0.18s linear;
+      opacity: 0.35;
+      box-shadow: 0 0 8px rgba(42, 30, 15, 0.8);
+      position: relative;
+      z-index: 1;
+    }
+
+    .runner-row.leader .runner-bar {
+      opacity: 0.55;
+      box-shadow: 0 0 12px rgba(250, 250, 210, 0.9);
+    }
+
+    .marker {
+      position: absolute;
+      top: 80px;
+      bottom: 34px;
+      width: 2px;
+      background: rgba(148, 163, 184, 0.9);
+      transform: translateX(-50%);
+      z-index: 40;
+    }
+
+    .marker-ravito {
+      background: rgba(248, 250, 252, 0.216);
+    }
+
+    .marker-start,
+    .marker-finish {
+      width: 0;
+      background: none;
+    }
+
+    .marker-start::before,
+    .marker-start::after,
+    .marker-finish::before,
+    .marker-finish::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        #f9fafb 0px,
+        #f9fafb 4px,
+        #020617 4px,
+        #020617 8px
+      );
+      box-shadow: 0 0 8px rgba(15, 23, 42, 0.9);
+    }
+
+    .marker-start::before,
+    .marker-finish::before {
+      left: -8px;
+    }
+
+    .marker-start::after,
+    .marker-finish::after {
+      left: 8px;
+    }
+
+    .marker-label {
+      position: absolute;
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.95rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.85;
+      white-space: nowrap;
+      color: #e5e7eb;
+      text-shadow: 0 1px 3px rgba(15,23,42,0.9);
+      z-index: 41;
+    }
+
+    .marker-start .marker-label {
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .marker-finish .marker-label {
+      bottom: -18px;
+      left: auto;
+      right: 130%;
+      transform: none;
+    }
+
+    .marker-ravito .marker-label {
+      bottom: auto;
+      top: 60%;
+      left: 450%;
+      transform: translateY(-50%) rotate(-90deg);
+      transform-origin: left center;
+      font-size: 0.95rem; /*police des ravitos*/
+      font-weight: 800;
+      opacity: 0.65;
+      letter-spacing: 0.1em;
+    }
+
+    .race-title {
+      display: none;
+    }
+
+    .legend {
+      margin-top: 0.75rem;
+      font-size: 0.72rem;
+      opacity: 0.9;
+      max-width: 360px;
+      text-align: center;
+      color: #e5e7eb;
+    }
+
+    .data-loader {
+      margin-top: 0.4rem;
+      font-size: 0.72rem;
+      opacity: 0.9;
+      max-width: 360px;
+      text-align: center;
+      color: #e5e7eb;
+    }
+
+    .data-loader label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      cursor: pointer;
+      color: #e5e7eb;
+    }
+
+    .data-loader input[type="file"] {
+      display: none;
+    }
+
+    .data-hint {
+      margin-top: 0.25rem;
+      opacity: 0.8;
+    }
+
+    .controls {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+    }
+
+    .controls button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.9);
+      color: #e5e7eb;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(15,23,42,0.9);
+    }
+
+    .controls button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .controls button:hover:enabled {
+      border-color: #60a5fa;
+    }
+
+    .splits-panel {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      max-width: 360px;
+      color: #e5e7eb;
+    }
+
+    .split-block {
+      margin-bottom: 0.5rem;
+      padding: 6px 8px;
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      box-shadow: 0 10px 24px rgba(15,23,42,0.85);
+    }
+
+    .split-title {
+      font-weight: 600;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.68rem;
+      opacity: 0.9;
+      color: #e5e7eb;
+    }
+
+    .split-list {
+      margin: 0;
+      padding-left: 14px;
+    }
+
+    .split-list li {
+      list-style: decimal;
+      color: #e5e7eb;
+    }
+
+    #countdownOverlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 60;
+    }
+
+    #countdownNumber {
+      font-size: 160px;
+      font-weight: 800;
+      color: #f9fafb;
+      text-shadow:
+        0 0 20px rgba(15,23,42,0.9),
+        0 0 60px rgba(59,130,246,0.9);
+      letter-spacing: 0.05em;
+    }
+
+    /* MODE ENREGISTREMENT : on coupe les animations pour soulager le navigateur */
+    body.is-recording .runner-sprite {
+      animation: none;
+    }
+    body.is-recording .sprite-leg.left,
+    body.is-recording .sprite-leg.right {
+      animation: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div id="track">
+      <div class="race-title" id="raceTitle">SAINTELYON</div>
+
+      <div class="hud-top">
+        <div class="hud-top-left">
+          <div class="pill" id="hud-rank">En attente de données CSV</div>
+        </div>
+        <div class="hud-top-center">
+          <div class="pill" id="hud-distance">km 0.0</div>
+          <div class="pill" id="hud-time">00:00:00</div>
+        </div>
+        <div class="hud-top-right">
+          <div class="pill pill--live">
+            <span class="pill--live-dot"></span>
+            <span class="pill--live-text">LIVE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-line" style="top: 26%; opacity: 0.16;"></div>
+      <div class="grid-line" style="top: 42%; opacity: 0.13;"></div>
+      <div class="grid-line" style="top: 58%; opacity: 0.11;"></div>
+      <div class="grid-line" style="top: 74%; opacity: 0.09;"></div>
+
+      <div class="hud-bottom">
+        <div class="pill">Fenêtre = portion de course visible</div>
+      </div>
+
+      <div id="countdownOverlay">
+        <div id="countdownNumber"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    Importe un fichier CSV puis clique sur « Démarrer l'animation » pour lancer la visualisation.<br>
+    Format d'entête conseillé : <code>Nom;10 km - RAVITO A;25 km - RAVITO B;40 km - FINISH</code>
+  </div>
+
+  <div class="settings" style="max-width:360px; font-size:0.72rem; opacity:0.9; margin-top:0.4rem; color:#e5e7eb;">
+    <div style="margin-bottom:0.25rem;">
+      <label>
+        Nom de la course :
+        <input id="raceTitleInput" type="text" value="SAINTELYON" />
+      </label>
+    </div>
+    <div style="margin-bottom:0.25rem;">
+      <label>
+        Durée de la vidéo (s) :
+        <input id="raceDurationInput" type="number" min="5" max="600" step="5" value="30" />
+      </label>
+    </div>
+    <div>
+      <label>
+        Fenêtre caméra (km) :
+        <input id="cameraWindowInput" type="number" min="1" max="500" step="1" value="22" />
+      </label>
+    </div>
+  </div>
+
+  <div class="data-loader">
+    <label>
+      Charger un fichier CSV
+      <input id="csvInput" type="file" accept=".csv" />
+    </label>
+    <div class="data-hint">
+      Première colonne = nom du coureur, puis 1 colonne par temps de point de passage (ravitos + arrivée), au format hh:mm:ss.<br>
+      Les km et noms de ravito sont lus automatiquement dans l'entête (ex : « 21 km - ST GENOUX »).
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btnStart" disabled>Démarrer l'animation</button>
+    <button id="btnStop" disabled>Arrêter</button>
+    <button id="btnExport">Exporter en vidéo (onglet)</button>
+  </div>
+
+  <div id="splitsPanel" class="splits-panel"></div>
+
+  <script>
+    const TARGET_FPS = 30;   /* FPS capture */
+
+    let raceTotalKm = 40;
+    let cpKms = null;
+    let raceDuration = 30;
+    let cameraWindow = 22;
+
+    function getSupportedMimeType() {
+      const types = [
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+        "video/mp4;codecs=h264"
+      ];
+      if (!window.MediaRecorder) return null;
+      for (const t of types) {
+        if (MediaRecorder.isTypeSupported(t)) return t;
+      }
+      return null;
+    }
+
+    // Générer automatiquement 100 coureurs avec couleurs variées
+    const runners = Array.from({ length: 100 }, (_, i) => ({
+      id: i + 1,
+      name: `Runner ${i + 1}`,
+      color: `hsl(${(i * 3.6) % 360}, 70%, 55%)` // couleurs variées automatiquement
+    }));
+
+    let markerDefs = [];
+    let markers = [];
+    let cpMeta = [];
+    let startCountdown = 0;
+    let t = 0;
+    let isRunning = false;
+    let animationFrameId = null;
+    let maxFinishTime = 0;
+    let lastTimestamp = null;
+
+    const track = document.getElementById("track");
+    const rowHeight = 32;
+    const topMargin = 80;
+
+    const hudRank = document.getElementById("hud-rank");
+    const hudDistance = document.getElementById("hud-distance");
+    const hudTime = document.getElementById("hud-time");
+    const hudTopLeft = document.querySelector(".hud-top-left");
+
+    const csvInput = document.getElementById("csvInput");
+    const btnStart = document.getElementById("btnStart");
+    const btnStop = document.getElementById("btnStop");
+    const btnExport = document.getElementById("btnExport");
+    const splitsPanelEl = document.getElementById("splitsPanel");
+
+    const raceTitleEl = document.getElementById("raceTitle");
+    const raceTitleInput = document.getElementById("raceTitleInput");
+    const raceDurationInput = document.getElementById("raceDurationInput");
+    const cameraWindowInput = document.getElementById("cameraWindowInput");
+
+    const countdownOverlay = document.getElementById("countdownOverlay");
+    const countdownNumber = document.getElementById("countdownNumber");
+
+    if (raceTitleInput && raceTitleEl) {
+      raceTitleInput.addEventListener("input", () => {
+        raceTitleEl.textContent = raceTitleInput.value || "";
+      });
+    }
+
+    if (raceDurationInput) {
+      raceDurationInput.value = String(raceDuration);
+      raceDurationInput.addEventListener("change", () => {
+        const v = parseFloat(raceDurationInput.value);
+        if (!isNaN(v) && v > 0) raceDuration = v;
+      });
+    }
+
+    if (cameraWindowInput) {
+      cameraWindowInput.value = String(cameraWindow);
+      cameraWindowInput.addEventListener("change", () => {
+        const v = parseFloat(cameraWindowInput.value);
+        if (!isNaN(v) && v > 0) cameraWindow = v;
+      });
+    }
+
+    runners.forEach(r => {
+      r.splitTimes = null;
+      r.distance = 0;
+      r.active = false;
+    });
+
+    runners.forEach(runner => {
+      const row = document.createElement("div");
+      row.className = "runner-row";
+      row.dataset.id = runner.id;
+
+      const rank = document.createElement("div");
+      rank.className = "runner-rank";
+
+      const sprite = document.createElement("div");
+      sprite.className = "runner-sprite";
+
+      const head = document.createElement("div");
+      head.className = "sprite-head";
+
+      const body = document.createElement("div");
+      body.className = "sprite-body";
+      body.style.backgroundColor = runner.color;
+
+      const legs = document.createElement("div");
+      legs.className = "sprite-legs";
+
+      const legL = document.createElement("div");
+      legL.className = "sprite-leg left";
+
+      const legR = document.createElement("div");
+      legR.className = "sprite-leg right";
+
+      legs.appendChild(legL);
+      legs.appendChild(legR);
+
+      sprite.appendChild(head);
+      sprite.appendChild(body);
+      sprite.appendChild(legs);
+
+      const name = document.createElement("div");
+      name.className = "runner-name";
+      name.textContent = runner.name;
+
+      const barWrapper = document.createElement("div");
+      barWrapper.className = "runner-bar-wrapper";
+
+      const bar = document.createElement("div");
+      bar.className = "runner-bar";
+      bar.style.backgroundColor = runner.color;
+
+      barWrapper.appendChild(bar);
+      row.appendChild(rank);
+      row.appendChild(sprite);
+      row.appendChild(name);
+      row.appendChild(barWrapper);
+
+      row.style.display = "none";
+      track.appendChild(row);
+
+      runner._row = row;
+      runner._bar = bar;
+      runner._rank = rank;
+      runner._sprite = sprite;
+    });
+
+    function formatTimeHMS(seconds) {
+      const s = Math.floor(seconds);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+    }
+
+    function formatTimeHM(seconds) {
+      const s = Math.floor(seconds);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+
+    function clamp01(x) {
+      return x < 0 ? 0 : x > 1 ? 1 : x;
+    }
+
+    function parseTimeToSeconds(value) {
+      if (!value) return null;
+      const str = value.toString().trim();
+      if (!str) return null;
+
+      if (str.includes(":")) {
+        const parts = str.split(":").map(p => parseInt(p, 10) || 0);
+        if (parts.length === 3) {
+          const [h, m, s] = parts;
+          return h * 3600 + m * 60 + s;
+        } else if (parts.length === 2) {
+          const [m, s] = parts;
+          return m * 60 + s;
+        } else {
+          return parseInt(str, 10) || null;
+        }
+      }
+
+      const num = parseFloat(str.replace(",", "."));
+      if (isNaN(num)) return null;
+      return Math.round(num * 60);
+    }
+
+    function rebuildMarkers() {
+      markers.forEach(m => {
+        if (m && m.el && m.el.parentNode === track) {
+          track.removeChild(m.el);
+        }
+      });
+      markers = [];
+
+      markerDefs.forEach(def => {
+        const el = document.createElement("div");
+        el.className = `marker marker-${def.type}`;
+        const label = document.createElement("div");
+        label.className = "marker-label";
+        label.textContent = def.label;
+        el.appendChild(label);
+        track.appendChild(el);
+        markers.push({ def, el, label });
+      });
+    }
+
+    function setupCourseFromCPMeta(segmentCount) {
+      const cpCount = Math.min(segmentCount, cpMeta ? cpMeta.length : 0);
+
+      cpKms = [0];
+      let anyKm = false;
+
+      for (let i = 0; i < cpCount; i++) {
+        const meta = cpMeta[i];
+        let km = (meta && typeof meta.km === "number" && !isNaN(meta.km)) ? meta.km : null;
+        if (km != null) anyKm = true;
+        cpKms.push(km);
+      }
+
+      if (!anyKm) {
+        const fallbackTotal = 40;
+        cpKms = [];
+        for (let i = 0; i <= cpCount; i++) {
+          cpKms.push((i / cpCount) * fallbackTotal);
+        }
+        raceTotalKm = fallbackTotal;
+      } else {
+        let lastKm = 0;
+        for (let i = 1; i < cpKms.length; i++) {
+          if (cpKms[i] == null) {
+            cpKms[i] = lastKm;
+          } else {
+            lastKm = cpKms[i];
+          }
+        }
+        raceTotalKm = cpKms[cpKms.length - 1] || raceTotalKm;
+      }
+
+      markerDefs = [];
+
+      markerDefs.push({
+        id: "start",
+        label: "START",
+        km: 0,
+        type: "start",
+        dist: 0
+      });
+
+      for (let i = 1; i < cpKms.length; i++) {
+        const meta = cpMeta[i - 1];
+        const km = cpKms[i];
+        const isLast = (i === cpKms.length - 1);
+        const type = isLast ? "finish" : "ravito";
+
+        const baseName = meta && meta.label ? meta.label : (isLast ? "FINISH" : `CP${i}`);
+        const label = isLast
+          ? (baseName || "FINISH")
+          : `${Math.round(km)} km · ${baseName}`;
+
+        markerDefs.push({
+          id: isLast ? "finish" : `cp${i}`,
+          label,
+          km,
+          type,
+          dist: km
+        });
+      }
+    }
+
+    function getDistanceAtTime(runner, timeSec) {
+      const splits = runner.splitTimes;
+      if (!splits || splits.length === 0) return 0;
+
+      const tReal = timeSec;
+      const segmentCount = splits.length - 1;
+      if (segmentCount <= 0) return 0;
+
+      if (tReal <= splits[0]) return 0;
+
+      for (let i = 0; i < segmentCount; i++) {
+        const t0 = splits[i];
+        const t1 = splits[i + 1];
+
+        let d0, d1;
+        if (cpKms && cpKms.length === splits.length) {
+          d0 = cpKms[i];
+          d1 = cpKms[i + 1];
+        } else {
+          d0 = (i / segmentCount) * raceTotalKm;
+          d1 = ((i + 1) / segmentCount) * raceTotalKm;
+        }
+
+        if (tReal >= t0 && tReal <= t1) {
+          const denom = (t1 - t0) || 1;
+          const f = (tReal - t0) / denom;
+          return d0 + f * (d1 - d0);
+        }
+      }
+
+      if (cpKms && cpKms.length === splits.length) {
+        return cpKms[cpKms.length - 1];
+      }
+      return raceTotalKm;
+    }
+
+    function hasActiveRunners() {
+      return runners.some(r => r.active && r.splitTimes && r.splitTimes.length >= 2);
+    }
+
+    function buildSplitsPanel() {
+      if (!splitsPanelEl) return;
+
+      const active = runners.filter(r => r.active && r.splitTimes && r.splitTimes.length >= 2);
+      if (!active.length) {
+        splitsPanelEl.innerHTML = "";
+        return;
+      }
+
+      const segmentCount = active[0].splitTimes.length - 1;
+      let html = "";
+
+      for (let cpIndex = 1; cpIndex <= segmentCount; cpIndex++) {
+        let km;
+        if (cpKms && cpKms.length > cpIndex) {
+          km = cpKms[cpIndex];
+        } else {
+          km = raceTotalKm * (cpIndex / segmentCount);
+        }
+
+        const meta = cpMeta && cpMeta[cpIndex - 1];
+        const baseName = meta && meta.label ? meta.label : `CP${cpIndex}`;
+
+        const label = (cpIndex === segmentCount)
+          ? (baseName || "FINISH")
+          : `${Math.round(km)} km · ${baseName}`;
+
+        const results = active
+          .map(r => ({ name: r.name, time: r.splitTimes[cpIndex] }))
+          .filter(x => typeof x.time === "number" && !isNaN(x.time))
+          .sort((a, b) => a.time - b.time);
+
+        if (!results.length) continue;
+
+        html += '<div class="split-block">';
+        html += `<div class="split-title">${label}</div>`;
+        html += '<ol class="split-list">';
+        results.forEach((res, idx) => {
+          html += `<li>#${idx + 1} ${res.name} – ${formatTimeHM(res.time)}</li>`;
+        });
+        html += '</ol></div>';
+      }
+
+      splitsPanelEl.innerHTML = html;
+    }
+
+    function resetDistances() {
+      runners.forEach(r => {
+        if (r.active) r.distance = 0;
+      });
+      t = 0;
+      lastTimestamp = null;
+    }
+
+    function renderFrame(raceClock) {
+      const activeRunners = runners.filter(r => r.active && r.splitTimes);
+      if (!activeRunners.length) return;
+
+      activeRunners.forEach(runner => {
+        runner.distance = getDistanceAtTime(runner, raceClock);
+      });
+
+      const ranking = [...activeRunners].sort((a, b) => {
+        const dd = b.distance - a.distance;
+        if (Math.abs(dd) > 0.0001) return dd;
+        const ta = a.splitTimes[a.splitTimes.length - 1];
+        const tb = b.splitTimes[b.splitTimes.length - 1];
+        return ta - tb;
+      });
+
+      const leader = ranking[0];
+      const tail = ranking[ranking.length - 1];
+
+      ranking.forEach(r => {
+        if (r._row) r._row.classList.remove("leader");
+      });
+      if (leader && leader._row) leader._row.classList.add("leader");
+
+      const mid = (leader.distance + tail.distance) / 2;
+      let cameraCenter = mid + cameraWindow * 0.12;
+      cameraCenter = Math.max(cameraWindow / 2, Math.min(raceTotalKm - cameraWindow / 2, cameraCenter));
+
+      markers.forEach(({ def, el }) => {
+        const local = (def.dist - (cameraCenter - cameraWindow / 2)) / cameraWindow;
+        if (local < 0 || local > 1) {
+          el.style.display = "none";
+        } else {
+          el.style.display = "block";
+          const pct = clamp01(local) * 100;
+          el.style.left = `${pct}%`;
+        }
+      });
+
+      ranking.forEach((runner, idx) => {
+        const row = runner._row;
+        const bar = runner._bar;
+        const rankEl = runner._rank;
+        const spriteEl = runner._sprite;
+
+        row.style.display = "";
+        row.classList.toggle("row-even", idx % 2 === 0);
+
+        const top = topMargin + idx * rowHeight;
+        row.style.top = `${top}px`;
+
+        const local = (runner.distance - (cameraCenter - cameraWindow / 2)) / cameraWindow;
+        const pct = clamp01(local) * 100;
+
+        const nameEl = row.querySelector(".runner-name");
+        const nameWidth = nameEl.offsetWidth;
+        const rowWidth = row.offsetWidth || 1;
+
+        const spriteBase = pct;
+        const spriteSafeLeft = Math.min(Math.max(spriteBase, 2), 98);
+        spriteEl.style.left = `${spriteSafeLeft}%`;
+
+        const namePctWidth = (nameWidth / rowWidth) * 100;
+        const nameRightTarget = spriteSafeLeft - 1.5;
+        let nameLeft = nameRightTarget - namePctWidth;
+        if (nameLeft < 0) nameLeft = 0;
+        nameEl.style.left = `${nameLeft}%`;
+
+        const finishTime = runner.splitTimes && runner.splitTimes[runner.splitTimes.length - 1];
+        const runnerTime = (typeof finishTime === "number" && raceClock >= finishTime)
+          ? finishTime
+          : raceClock;
+
+        nameEl.textContent = `${idx + 1} - ${formatTimeHM(runnerTime)} · ${runner.name}`;
+        rankEl.style.display = "none";
+
+        const barPct = (runner.distance / raceTotalKm) * 100;
+        bar.style.width = `${barPct}%`;
+      });
+
+      hudDistance.textContent = `km ${leader.distance.toFixed(1)}`;
+      hudTime.textContent = formatTimeHMS(raceClock);
+      hudRank.textContent = `1er: ${leader.name}`;
+    }
+
+    function update(timestamp) {
+      if (!isRunning) {
+        animationFrameId = null;
+        return;
+      }
+
+      if (!hasActiveRunners() || maxFinishTime <= 0) {
+        isRunning = false;
+        animationFrameId = null;
+        return;
+      }
+
+      if (lastTimestamp === null) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+      t += delta;
+
+      const activeRunners = runners.filter(r => r.active && r.splitTimes);
+      if (!activeRunners.length) {
+        isRunning = false;
+        animationFrameId = null;
+        return;
+      }
+
+      const raceClock = Math.min((t / raceDuration) * maxFinishTime, maxFinishTime);
+      renderFrame(raceClock);
+
+      if (isRunning && t < raceDuration) {
+        animationFrameId = requestAnimationFrame(update);
+      } else {
+        isRunning = false;
+        animationFrameId = null;
+      }
+    }
+
+    function handleCSVUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const text = e.target.result;
+
+        // on découpe les lignes non vides (gère CRLF, LF ou CR seul)
+        let lines = text.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
+
+        // on nettoie les lignes entourées de guillemets (cas Excel / exports Windows)
+        lines = lines.map(l => {
+          let s = l.trim();
+
+          // ligne entièrement entre guillemets => on enlève les deux
+          if (s.startsWith('"') && s.endsWith('"')) {
+            s = s.slice(1, -1);
+          }
+
+          // sécurité : guillemet que d'un seul côté (souvent Excel)
+          if (s.startsWith('"')) s = s.slice(1);
+          if (s.endsWith('"')) s = s.slice(0, -1);
+
+          return s;
+        });
+
+        if (lines.length <= 1) {
+          if (hudTopLeft) hudTopLeft.style.display = "block";
+          hudRank.textContent = "CSV invalide (aucune ligne exploitable)";
+          alert("CSV invalide : aucune ligne exploitable trouvée.");
+          return;
+        }
+
+
+        const header = lines[0];
+        const delimiter = header.includes(";") ? ";" : ",";
+
+        const headerCols = header.split(delimiter);
+        const cpHeaders = headerCols.slice(1);
+
+        cpMeta = cpHeaders.map((raw, idx) => {
+          const cleaned = (raw || "").trim();
+
+          const fullMatch = cleaned.match(/(\d+(?:[.,]\d+)?)\s*km\s*-\s*(.+)/i);
+          let km = null;
+          let label = cleaned || ("CP" + (idx + 1));
+
+          if (fullMatch) {
+            km = parseFloat(fullMatch[1].replace(",", "."));
+            label = fullMatch[2].trim();
+          } else {
+            const kmMatch = cleaned.match(/(\d+(?:[.,]\d+)?)\s*km/i);
+            if (kmMatch) km = parseFloat(kmMatch[1].replace(",", "."));
+          }
+
+          return { km, label, index: idx + 1 };
+        });
+
+        runners.forEach(r => {
+          r.splitTimes = null;
+          r.active = false;
+          r.distance = 0;
+          if (r._row) r._row.style.display = "none";
+        });
+        t = 0;
+        lastTimestamp = null;
+        isRunning = false;
+        if (splitsPanelEl) splitsPanelEl.innerHTML = "";
+        maxFinishTime = 0;
+
+        let runnerIndex = 0;
+        let cpCountDetected = null;
+
+        for (let i = 1; i < lines.length && runnerIndex < runners.length; i++) {
+          const cols = lines[i].split(delimiter);
+          if (cols.length < 2) continue;
+
+          const name = cols[0].trim();
+          if (!name) continue;
+
+          const timesRaw = cols.slice(1).map(parseTimeToSeconds).filter(v => v != null);
+          if (!timesRaw.length) continue;
+
+          if (cpCountDetected === null) cpCountDetected = timesRaw.length;
+
+          const runner = runners[runnerIndex];
+          if (!runner) break;
+
+          runner.name = name;
+          if (runner._row) {
+            const nameEl = runner._row.querySelector(".runner-name");
+            if (nameEl) nameEl.textContent = name;
+          }
+
+          let splitTimes = [0, ...timesRaw];
+
+          const targetLength = (cpCountDetected || timesRaw.length) + 1;
+          if (splitTimes.length > targetLength) {
+            splitTimes.length = targetLength;
+          } else if (splitTimes.length < targetLength) {
+            const last = splitTimes[splitTimes.length - 1];
+            while (splitTimes.length < targetLength) {
+              splitTimes.push(last);
+            }
+          }
+
+          runner.splitTimes = splitTimes;
+          runner.active = true;
+          runner.distance = 0;
+          if (runner._row) runner._row.style.display = "";
+
+          runnerIndex++;
+        }
+
+        const active = runners.filter(r => r.active && r.splitTimes && r.splitTimes.length >= 2);
+
+        if (active.length && active[0].splitTimes) {
+          const segCount = active[0].splitTimes.length - 1;
+
+          setupCourseFromCPMeta(segCount);
+          rebuildMarkers();
+
+          maxFinishTime = Math.max(...active.map(r => r.splitTimes[r.splitTimes.length - 1]));
+        } else {
+          maxFinishTime = 0;
+          markerDefs = [];
+          rebuildMarkers();
+        }
+
+        if (runnerIndex > 0 && maxFinishTime > 0) {
+          if (hudTopLeft) hudTopLeft.style.display = "none";  // pas besoin de texte permanent
+          hudRank.textContent = "Données chargées, prêt à démarrer";
+          btnStart.disabled = false;
+          btnStop.disabled = false;
+          buildSplitsPanel();
+
+          resetDistances();
+          renderFrame(0);
+        } else {
+          if (hudTopLeft) hudTopLeft.style.display = "block";
+          hudRank.textContent = "CSV invalide ou sans temps exploitables";
+          btnStart.disabled = true;
+          btnStop.disabled = true;
+          if (splitsPanelEl) splitsPanelEl.innerHTML = "";
+          alert("CSV invalide : pas de temps utilisables trouvés (format ou valeurs incorrects).");
+        }
+      };
+
+      reader.readAsText(file);
+    }
+
+    csvInput.addEventListener("change", handleCSVUpload);
+
+    function startRaceWithCountdown(onGo) {
+      if (!hasActiveRunners() || maxFinishTime <= 0) return;
+
+      resetDistances();
+      renderFrame(0);
+
+      startCountdown = 3;
+      countdownOverlay.style.display = "flex";
+      countdownNumber.textContent = startCountdown;
+
+      if (hudTopLeft) hudTopLeft.style.display = "block";
+      hudRank.textContent = "Départ imminent...";
+
+      const countdownInterval = setInterval(() => {
+        startCountdown -= 1;
+
+        if (startCountdown > 0) {
+          countdownNumber.textContent = startCountdown;
+        } else {
+          countdownNumber.textContent = "GO";
+          setTimeout(() => {
+            countdownOverlay.style.display = "none";
+          }, 260);
+
+          clearInterval(countdownInterval);
+
+          hudRank.textContent = "Départ !";
+          setTimeout(() => {
+            if (hudTopLeft) hudTopLeft.style.display = "none";
+          }, 1200);
+
+          onGo();
+        }
+      }, 1000);
+    }
+
+    btnStart.addEventListener("click", () => {
+      startRaceWithCountdown(() => {
+        isRunning = true;
+        t = 0;
+        lastTimestamp = null;
+        animationFrameId = requestAnimationFrame(update);
+      });
+    });
+
+    btnStop.addEventListener("click", () => {
+      isRunning = false;
+    });
+
+    btnExport.addEventListener("click", async () => {
+      const originalText = btnExport.textContent;
+      const originalDisabled = btnExport.disabled;
+
+      if (!hasActiveRunners() || maxFinishTime <= 0) {
+        alert("Charge d'abord un fichier CSV et prépare l'animation avant d'enregistrer.");
+        return;
+      }
+
+      const trackEl = document.getElementById("track");
+      let stream = null;
+
+      try {
+        if (trackEl && typeof trackEl.captureStream === "function") {
+          stream = trackEl.captureStream(TARGET_FPS);
+        } else if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+          alert(
+            "Ton navigateur ne permet pas la capture directe de l’élément.\n" +
+            "Une fenêtre va s’ouvrir : choisis l’onglet où tourne l’animation."
+          );
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: TARGET_FPS }
+          });
+        } else {
+          alert(
+            "La capture vidéo n'est pas supportée par ce navigateur.\n" +
+            "Essaie avec Chrome, Edge ou une version plus récente."
+          );
+          return;
+        }
+      } catch (err) {
+        console.error("Erreur lors de la récupération du stream :", err);
+        alert("Échec de la capture d'écran / de l'onglet.");
+        return;
+      }
+
+      if (!stream) {
+        alert("Impossible de démarrer la capture vidéo.");
+        return;
+      }
+
+      const chunks = [];
+      let recorder;
+
+      const mimeType = getSupportedMimeType();
+
+      try {
+        if (mimeType) {
+          recorder = new MediaRecorder(stream, {
+            mimeType,
+            videoBitsPerSecond: 8000000
+          });
+        } else {
+          recorder = new MediaRecorder(stream);
+        }
+      } catch (e) {
+        console.warn("Options MediaRecorder non supportées, fallback simple", e);
+        try {
+          recorder = new MediaRecorder(stream);
+        } catch (err) {
+          console.error("MediaRecorder non disponible :", err);
+          alert("L'enregistrement vidéo n'est pas supporté sur ce navigateur.");
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+      }
+
+      btnExport.textContent = "Enregistrement en cours...";
+      btnExport.disabled = true;
+
+      document.body.classList.add("is-recording"); /* coupe les animations */
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "video/webm";
+        const blob = new Blob(chunks, { type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const baseName =
+          (raceTitleInput && raceTitleInput.value
+            ? raceTitleInput.value.trim().replace(/\s+/g, "_")
+            : "course");
+
+        const extension = type.includes("mp4") ? ".mp4" : ".webm";
+        a.href = url;
+        a.download = baseName + extension;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        stream.getTracks().forEach(t => t.stop());
+        document.body.classList.remove("is-recording");
+
+        btnExport.textContent = originalText;
+        btnExport.disabled = originalDisabled;
+        alert("Vidéo enregistrée : le fichier a été téléchargé.");
+      };
+
+      recorder.start();
+
+      startRaceWithCountdown(() => {
+        isRunning = true;
+        t = 0;
+        lastTimestamp = null;
+        if (!animationFrameId) {
+          animationFrameId = requestAnimationFrame(update);
+        }
+
+        const durationMs = raceDuration * 1000 + 500;
+
+        setTimeout(() => {
+          if (recorder.state !== "inactive") recorder.stop();
+          isRunning = false;
+        }, durationMs);
+      });
+    });
+  </script>
+</body>
+</html>
